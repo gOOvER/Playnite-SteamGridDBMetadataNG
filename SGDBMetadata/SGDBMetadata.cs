@@ -1,10 +1,7 @@
-﻿using Playnite.SDK;
+using Playnite.SDK;
 using Playnite.SDK.Plugins;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Controls;
 
 namespace SGDBMetadata
@@ -12,8 +9,9 @@ namespace SGDBMetadata
     public class SGDBMetadata : MetadataPlugin
     {
         private static readonly ILogger logger = LogManager.GetLogger();
-
         private SGDBMetadataSettingsViewModel settings { get; set; }
+
+        public SgdbServiceClient Client { get; private set; }
 
         public override Guid Id { get; } = Guid.Parse("f9a763e1-1ccb-4d7d-b955-d59e708f71c1");
 
@@ -29,15 +27,21 @@ namespace SGDBMetadata
         public SGDBMetadata(IPlayniteAPI api) : base(api)
         {
             settings = new SGDBMetadataSettingsViewModel(this);
+            Client = new SgdbServiceClient(settings.Settings);
             Properties = new MetadataPluginProperties
             {
                 HasSettings = true
             };
         }
 
+        public void UpdateSettings(SGDBMetadataSettings newSettings)
+        {
+            Client?.UpdateSettings(newSettings);
+        }
+
         public override OnDemandMetadataProvider GetMetadataProvider(MetadataRequestOptions options)
         {
-            return new SGDBMetadataProvider(options, this, settings.Settings);
+            return new SGDBMetadataProvider(options, this, settings.Settings, Client);
         }
 
         public override ISettings GetSettings(bool firstRunSettings)

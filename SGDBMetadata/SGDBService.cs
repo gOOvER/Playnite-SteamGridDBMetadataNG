@@ -1,472 +1,483 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Newtonsoft;
+using Newtonsoft.Json;
+using Playnite.SDK;
 using RestSharp;
 using RestSharp.Authenticators;
-using SGDBMetadata;
-using Playnite.SDK;
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Threading;
 
 namespace SGDBMetadata
 {
     public class SgdbServiceClient
     {
-        private readonly string baseUrl = @"https://www.steamgriddb.com/api/v2/";
+        private static readonly ILogger logger = LogManager.GetLogger();
+        private const string BaseUrl = "https://www.steamgriddb.com/api/v2/";
 
-        private RestClient client;
-        private readonly SGDBMetadataSettings settings;
+        private readonly RestClient client;
+        private SGDBMetadataSettings settings;
 
         public SgdbServiceClient(SGDBMetadataSettings settings)
         {
-            client = new RestClient(baseUrl);
-            client.Authenticator = new JwtAuthenticator(settings.ApiKey);
-            this.settings = settings;
+            this.settings = settings ?? new SGDBMetadataSettings();
+            client = new RestClient(BaseUrl);
+            UpdateAuthenticator();
         }
 
-        public RestClient RestClient { get; set; }
+        public void UpdateSettings(SGDBMetadataSettings newSettings)
+        {
+            settings = newSettings ?? new SGDBMetadataSettings();
+            UpdateAuthenticator();
+        }
+
+        private void UpdateAuthenticator()
+        {
+            if (!string.IsNullOrWhiteSpace(settings.ApiKey))
+            {
+                client.Authenticator = new JwtAuthenticator(settings.ApiKey.Trim());
+            }
+            else
+            {
+                client.Authenticator = null;
+            }
+        }
 
         public T Execute<T>(RestRequest request) where T : new()
         {
             request.OnBeforeDeserialization = resp => { resp.ContentType = "application/json"; };
-            var logger = LogManager.GetLogger();
+
             var fullUrl = client.BuildUri(request);
-            logger.Info(fullUrl.ToString());
+            logger.Debug($"SGDB Request: {fullUrl}");
+
             var response = client.Execute(request);
+
+            // Handle HTTP 429 Too Many Requests (Rate Limiting) with one backoff retry
+            if (response.StatusCode == (HttpStatusCode)429)
+            {
+                logger.Warn("SteamGridDB rate limit reached (HTTP 429). Retrying after 1.5 seconds...");
+                Thread.Sleep(1500);
+                response = client.Execute(request);
+            }
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                logger.Warn("SteamGridDB API returned 401 Unauthorized. Please verify your API key in plugin settings.");
+                return default;
+            }
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                logger.Debug($"SteamGridDB 404 Not Found for {fullUrl}");
+                return default;
+            }
+
             if (response.ErrorException != null)
             {
-                const string message = "Error retrieving response. Check inner details for more info.";
-                var sgdbException = new Exception(message, response.ErrorException);
-                throw sgdbException;
+                logger.Error(response.ErrorException, $"SteamGridDB request error for {fullUrl}: {response.ErrorMessage}");
+                return default;
             }
-            var content = response.Content;
-            logger.Info(content);
-            return Newtonsoft.Json.JsonConvert.DeserializeObject<T>(content);
+
+            if (string.IsNullOrWhiteSpace(response.Content))
+            {
+                return default;
+            }
+
+            try
+            {
+                return JsonConvert.DeserializeObject<T>(response.Content);
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, $"Failed to deserialize SteamGridDB response for {fullUrl}");
+                return default;
+            }
         }
 
         public ResponseModel<SearchModel> getSGDBGames(string searchName)
         {
-            var logger = LogManager.GetLogger();
-            logger.Info(searchName);
+            if (string.IsNullOrWhiteSpace(searchName))
+            {
+                return new ResponseModel<SearchModel>();
+            }
+
+            logger.Debug($"getSGDBGames: {searchName}");
+            var escapedName = Uri.EscapeDataString(searchName.Trim());
             var request = new RestRequest("search/autocomplete/{searchName}", Method.GET);
-            request.AddParameter("searchName", searchName, ParameterType.UrlSegment);
-            return Execute<ResponseModel<SearchModel>>(request);
+            request.AddUrlSegment("searchName", escapedName);
+            return Execute<ResponseModel<SearchModel>>(request) ?? new ResponseModel<SearchModel>();
         }
 
         public ResponseModel<GridModel> getSGDBGameGridByAppId(string platform, string gameId)
         {
             var request = new RestRequest("grids/{platform}/{gameId}", Method.GET);
-            request.AddParameter("platform", platform, ParameterType.UrlSegment);
-            request.AddParameter("gameId", gameId, ParameterType.UrlSegment);
-            if (settings.CoverStyle != "any")
-            {
-                request.AddParameter("styles", settings.CoverStyle, ParameterType.GetOrPost);
-            }
-            if (settings.CoverDimension != "any")
-            {
-                request.AddParameter("dimensions", settings.CoverDimension, ParameterType.GetOrPost);
-            }
-            request.AddParameter("nsfw", settings.CoverNsfw, ParameterType.GetOrPost);
-            request.AddParameter("humor", settings.CoverHumor, ParameterType.GetOrPost);
+            request.AddUrlSegment("platform", platform);
+            request.AddUrlSegment("gameId", gameId);
+            ApplyCoverFilters(request);
 
-            return Execute<ResponseModel<GridModel>>(request);
+            return Execute<ResponseModel<GridModel>>(request) ?? new ResponseModel<GridModel>();
         }
 
         public ResponseModel<GridModel> getSGDBGameGridCover(int gameId)
         {
             var request = new RestRequest("grids/game/{id}", Method.GET);
-            request.AddParameter("id", gameId, ParameterType.UrlSegment);
+            request.AddUrlSegment("id", gameId.ToString());
+            ApplyCoverFilters(request);
+
+            return Execute<ResponseModel<GridModel>>(request) ?? new ResponseModel<GridModel>();
+        }
+
+        private void ApplyCoverFilters(RestRequest request)
+        {
             if (settings.CoverStyle != "any")
             {
-                request.AddParameter("styles", settings.CoverStyle, ParameterType.GetOrPost);
+                request.AddQueryParameter("styles", settings.CoverStyle);
             }
             if (settings.CoverDimension != "any")
             {
-                request.AddParameter("dimensions", settings.CoverDimension, ParameterType.GetOrPost);
+                request.AddQueryParameter("dimensions", settings.CoverDimension);
             }
-            request.AddParameter("nsfw", settings.CoverNsfw, ParameterType.GetOrPost);
-            request.AddParameter("humor", settings.CoverHumor, ParameterType.GetOrPost);
-            return Execute<ResponseModel<GridModel>>(request);
+            if (settings.CoverType != "any")
+            {
+                request.AddQueryParameter("types", settings.CoverType);
+            }
+            if (settings.CoverNsfw != "any")
+            {
+                request.AddQueryParameter("nsfw", settings.CoverNsfw);
+            }
+            if (settings.CoverHumor != "any")
+            {
+                request.AddQueryParameter("humor", settings.CoverHumor);
+            }
+            if (settings.CoverEpilepsy != "any")
+            {
+                request.AddQueryParameter("epilepsy", settings.CoverEpilepsy);
+            }
         }
-        
+
         public ResponseModel<HeroModel> getSGDBGameHero(int gameId)
         {
-            var logger = LogManager.GetLogger();
-            logger.Info("getSGDBGameHero");
-            var request = new RestRequest("/heroes/game/{id}", Method.GET);
-            request.AddParameter("id", gameId, ParameterType.UrlSegment);
-            if (settings.BackgroundStyle != "any")
-            {
-                request.AddParameter("styles", settings.BackgroundStyle, ParameterType.GetOrPost);
-            }
-            if (settings.BackgroundDimension != "any")
-            {
-                request.AddParameter("dimensions", settings.BackgroundDimension, ParameterType.GetOrPost);
-            }
-            request.AddParameter("nsfw", settings.BackgroundNsfw, ParameterType.GetOrPost);
-            request.AddParameter("humor", settings.BackgroundHumor, ParameterType.GetOrPost);
+            // Note: Relative path without leading slash prevents stripping /api/v2/
+            var request = new RestRequest("heroes/game/{id}", Method.GET);
+            request.AddUrlSegment("id", gameId.ToString());
+            ApplyHeroFilters(request);
 
-            return Execute<ResponseModel<HeroModel>>(request);
+            return Execute<ResponseModel<HeroModel>>(request) ?? new ResponseModel<HeroModel>();
         }
 
         public ResponseModel<HeroModel> getSGDBGameHeroByAppId(string platform, string gameId)
         {
-            var logger = LogManager.GetLogger();
-            logger.Info("getSGDBGameHeroByAppId");
             var request = new RestRequest("heroes/{platform}/{gameId}", Method.GET);
-            request.AddParameter("platform", platform, ParameterType.UrlSegment);
-            request.AddParameter("gameId", gameId, ParameterType.UrlSegment);
+            request.AddUrlSegment("platform", platform);
+            request.AddUrlSegment("gameId", gameId);
+            ApplyHeroFilters(request);
+
+            return Execute<ResponseModel<HeroModel>>(request) ?? new ResponseModel<HeroModel>();
+        }
+
+        private void ApplyHeroFilters(RestRequest request)
+        {
             if (settings.BackgroundStyle != "any")
             {
-                request.AddParameter("styles", settings.BackgroundStyle, ParameterType.GetOrPost);
+                request.AddQueryParameter("styles", settings.BackgroundStyle);
             }
             if (settings.BackgroundDimension != "any")
             {
-                request.AddParameter("dimensions", settings.BackgroundDimension, ParameterType.GetOrPost);
+                request.AddQueryParameter("dimensions", settings.BackgroundDimension);
             }
-            request.AddParameter("nsfw", settings.BackgroundNsfw, ParameterType.GetOrPost);
-            request.AddParameter("humor", settings.BackgroundHumor, ParameterType.GetOrPost);
-
-            return Execute<ResponseModel<HeroModel>>(request);
+            if (settings.BackgroundType != "any")
+            {
+                request.AddQueryParameter("types", settings.BackgroundType);
+            }
+            if (settings.BackgroundNsfw != "any")
+            {
+                request.AddQueryParameter("nsfw", settings.BackgroundNsfw);
+            }
+            if (settings.BackgroundHumor != "any")
+            {
+                request.AddQueryParameter("humor", settings.BackgroundHumor);
+            }
+            if (settings.BackgroundEpilepsy != "any")
+            {
+                request.AddQueryParameter("epilepsy", settings.BackgroundEpilepsy);
+            }
         }
 
         public ResponseModel<MediaModel> getSGDBGameLogo(int gameId)
         {
             var request = new RestRequest("logos/game/{gameId}", Method.GET);
-            request.AddParameter("gameId", gameId, ParameterType.UrlSegment);
-            request.AddParameter("nsfw", settings.IconNsfw, ParameterType.GetOrPost);
-            request.AddParameter("humor", settings.IconHumor, ParameterType.GetOrPost);
+            request.AddUrlSegment("gameId", gameId.ToString());
+            ApplyIconOrLogoFilters(request);
 
-            return Execute<ResponseModel<MediaModel>>(request);
+            return Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>();
         }
 
         public ResponseModel<MediaModel> getSGDBGameLogoByAppId(string platform, string gameId)
         {
             var request = new RestRequest("logos/{platform}/{gameId}", Method.GET);
-            request.AddParameter("platform", platform, ParameterType.UrlSegment);
-            request.AddParameter("gameId", gameId, ParameterType.UrlSegment);
-            request.AddParameter("nsfw", settings.IconNsfw, ParameterType.GetOrPost);
-            request.AddParameter("humor", settings.IconHumor, ParameterType.GetOrPost);
+            request.AddUrlSegment("platform", platform);
+            request.AddUrlSegment("gameId", gameId);
+            ApplyIconOrLogoFilters(request);
 
-            return Execute<ResponseModel<MediaModel>>(request);
+            return Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>();
         }
 
         public ResponseModel<MediaModel> getSGDBGameIcon(int gameId)
         {
             var request = new RestRequest("icons/game/{gameId}", Method.GET);
-            request.AddParameter("gameId", gameId, ParameterType.UrlSegment);
-            request.AddParameter("nsfw", settings.IconNsfw, ParameterType.GetOrPost);
-            request.AddParameter("humor", settings.IconHumor, ParameterType.GetOrPost);
+            request.AddUrlSegment("gameId", gameId.ToString());
+            ApplyIconOrLogoFilters(request);
 
-            return Execute<ResponseModel<MediaModel>>(request);
+            return Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>();
         }
 
         public ResponseModel<MediaModel> getSGDBGameIconByAppId(string platform, string gameId)
         {
             var request = new RestRequest("icons/{platform}/{gameId}", Method.GET);
-            request.AddParameter("platform", platform, ParameterType.UrlSegment);
-            request.AddParameter("gameId", gameId, ParameterType.UrlSegment);
-            request.AddParameter("nsfw", settings.IconNsfw, ParameterType.GetOrPost);
-            request.AddParameter("humor", settings.IconHumor, ParameterType.GetOrPost);
+            request.AddUrlSegment("platform", platform);
+            request.AddUrlSegment("gameId", gameId);
+            ApplyIconOrLogoFilters(request);
 
-            return Execute<ResponseModel<MediaModel>>(request);
+            return Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>();
+        }
+
+        private void ApplyIconOrLogoFilters(RestRequest request)
+        {
+            if (settings.IconStyle != "any")
+            {
+                request.AddQueryParameter("styles", settings.IconStyle);
+            }
+            if (settings.IconType != "any")
+            {
+                request.AddQueryParameter("types", settings.IconType);
+            }
+            if (settings.IconNsfw != "any")
+            {
+                request.AddQueryParameter("nsfw", settings.IconNsfw);
+            }
+            if (settings.IconHumor != "any")
+            {
+                request.AddQueryParameter("humor", settings.IconHumor);
+            }
+            if (settings.IconEpilepsy != "any")
+            {
+                request.AddQueryParameter("epilepsy", settings.IconEpilepsy);
+            }
         }
 
         public SearchModel getGameSGDBFuzzySearch(string gameTitle)
         {
-            var logger = LogManager.GetLogger();
-            logger.Info(gameTitle);
+            if (string.IsNullOrWhiteSpace(gameTitle))
+            {
+                return null;
+            }
+
             var gameListResponse = getSGDBGames(gameTitle);
-            if (gameListResponse.success)
+            if (gameListResponse?.success == true && gameListResponse.data?.Count > 0)
             {
-                logger.Info(gameListResponse.data[0].name);
-                return gameListResponse.data[0]; //First element of search results, should probably implement fuzzysearchquery based on intentions
+                return gameListResponse.data[0];
             }
-            else
-            {
-                var sgdbException = new Exception("Service failure during getGameSGDBFuzzySearch");
-                throw sgdbException;
-            }
+
+            return null;
         }
 
         public List<SearchModel> getGameListSGDB(string gameTitle)
         {
-            var logger = LogManager.GetLogger();
-            logger.Info(gameTitle);
+            if (string.IsNullOrWhiteSpace(gameTitle))
+            {
+                return new List<SearchModel>();
+            }
+
             var gameListResponse = getSGDBGames(gameTitle);
-            if (gameListResponse.success)
+            if (gameListResponse?.success == true && gameListResponse.data != null)
             {
-                logger.Info(gameListResponse.data.ToString());
-                return gameListResponse.data; //First element of search results, should probably implement fuzzysearchquery based on intentions
+                return gameListResponse.data;
             }
-            else
-            {
-                var sgdbException = new Exception("Service failure during getGameListSGDB");
-                throw sgdbException;
-            }
+
+            return new List<SearchModel>();
         }
 
         public string getCoverImageUrl(SearchModel gameSearchItem, string platform, string gameId)
         {
-            if (platform != null && gameId != null)
+            if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                ResponseModel<GridModel> grid = getSGDBGameGridByAppId(platform, gameId); //First element of search results, should probably implement fuzzysearchquery based on intentions
-                if(grid.success && grid.data.Count > 0)
+                var grid = getSGDBGameGridByAppId(platform, gameId);
+                if (grid?.success == true && grid.data?.Count > 0)
                 {
                     return grid.data[0].url;
                 }
             }
-            else if (gameSearchItem != null)
+
+            if (gameSearchItem != null)
             {
-                ResponseModel<GridModel> grid = getSGDBGameGridCover(gameSearchItem.id);
-                if (grid.success && grid.data.Count > 0)
+                var grid = getSGDBGameGridCover(gameSearchItem.id);
+                if (grid?.success == true && grid.data?.Count > 0)
                 {
                     return grid.data[0].url;
                 }
             }
-            return "bad path";
+
+            return null;
         }
 
         public List<GridModel> getCoverImages(GenericItemOption searchSelection, string platform, string gameId)
         {
-            if (platform != null && gameId != null)
+            if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                ResponseModel<GridModel> grid = getSGDBGameGridByAppId(platform, gameId); //First element of search results, should probably implement fuzzysearchquery based on intentions
-                if (grid.success && grid.data.Count > 0)
+                var grid = getSGDBGameGridByAppId(platform, gameId);
+                if (grid?.success == true && grid.data?.Count > 0)
                 {
                     return grid.data;
                 }
-                else if (grid.success && grid.data.Count == 0)
-                {
-                    return null;
-                }
-                else
-                {
-                    var sgdbException = new Exception("Service failure during getCoverImages.");
-                    throw sgdbException;
-                }
             }
-            else if (searchSelection != null)
+
+            if (searchSelection != null && int.TryParse(searchSelection.Description, out int parsedId))
             {
-                ResponseModel<GridModel> grid = getSGDBGameGridCover(int.Parse(searchSelection.Description));
-                if (grid.success && grid.data.Count > 0)
+                var grid = getSGDBGameGridCover(parsedId);
+                if (grid?.success == true && grid.data?.Count > 0)
                 {
                     return grid.data;
                 }
-                else if (grid.success && grid.data.Count == 0)
-                {
-                    return null;
-                }
-                else
-                {
-                    var sgdbException = new Exception("Service failure during getCoverImages.");
-                    throw sgdbException;
-                }
             }
-            else
-            {
-                return null;
-            }
+
+            return null;
         }
 
         public string getHeroImageUrl(SearchModel gameSearchItem, string platform, string gameId)
         {
-            var logger = LogManager.GetLogger();
-            logger.Info("getHeroImageUrl");
-            logger.Info(gameSearchItem?.name);
-            logger.Info(platform);
-            logger.Info(gameId);
-            if (platform != null && gameId != null)
+            if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                ResponseModel<HeroModel> hero = getSGDBGameHeroByAppId(platform, gameId); //First element of search results, should probably implement fuzzysearchquery based on intentions
-                if (hero.success && hero.data.Count > 0)
+                var hero = getSGDBGameHeroByAppId(platform, gameId);
+                if (hero?.success == true && hero.data?.Count > 0)
                 {
                     return hero.data[0].url;
                 }
             }
-            else if (gameSearchItem != null)
+
+            if (gameSearchItem != null)
             {
-                ResponseModel<HeroModel> hero = getSGDBGameHero(gameSearchItem.id);
-                if (hero.success && hero.data.Count > 0)
+                var hero = getSGDBGameHero(gameSearchItem.id);
+                if (hero?.success == true && hero.data?.Count > 0)
                 {
                     return hero.data[0].url;
                 }
             }
-            return "bad path";
+
+            return null;
         }
 
         public List<HeroModel> getHeroImages(GenericItemOption searchSelection, string platform, string gameId)
         {
-            var logger = LogManager.GetLogger();
-            logger.Info("getHeroImages");
-            logger.Info(searchSelection?.Name);
-            logger.Info(platform);
-            logger.Info(gameId);
-            if (platform != null && gameId != null)
+            if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                ResponseModel<HeroModel> hero = getSGDBGameHeroByAppId(platform, gameId); //First element of search results, should probably implement fuzzysearchquery based on intentions
-                if (hero.success && hero.data.Count > 0)
+                var hero = getSGDBGameHeroByAppId(platform, gameId);
+                if (hero?.success == true && hero.data?.Count > 0)
                 {
                     return hero.data;
                 }
-                else if (hero.success && hero.data.Count == 0)
-                {
-                    return null;
-                }
-                else
-                {
-                    var sgdbException = new Exception("Service failure during getHeroImages");
-                    throw sgdbException;
-                }
             }
-            else if (searchSelection != null)
+
+            if (searchSelection != null && int.TryParse(searchSelection.Description, out int parsedId))
             {
-                ResponseModel<HeroModel> hero = getSGDBGameHero(int.Parse(searchSelection.Description));
-                if (hero.success && hero.data.Count > 0)
+                var hero = getSGDBGameHero(parsedId);
+                if (hero?.success == true && hero.data?.Count > 0)
                 {
                     return hero.data;
                 }
-                else if (hero.success && hero.data.Count == 0)
-                {
-                    return null;
-                }
-                else
-                {
-                    var sgdbException = new Exception("Service failure during getHeroImages");
-                    throw sgdbException;
-                }
             }
-            else
-            {
-                return null;
-            }
+
+            return null;
         }
 
         public string getLogoImageUrl(SearchModel gameSearchItem, string platform, string gameId)
         {
-            if (platform != null && gameId != null)
+            if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                ResponseModel<MediaModel> logo = getSGDBGameLogoByAppId(platform, gameId); //First element of search results, should probably implement fuzzysearchquery based on intentions
-                if (logo.success && logo.data.Count > 0)
+                var logo = getSGDBGameLogoByAppId(platform, gameId);
+                if (logo?.success == true && logo.data?.Count > 0)
                 {
                     return logo.data[0].url;
                 }
             }
-            else if (gameSearchItem != null)
+
+            if (gameSearchItem != null)
             {
-                ResponseModel<MediaModel> logo = getSGDBGameLogo(gameSearchItem.id);
-                if (logo.success && logo.data.Count > 0)
+                var logo = getSGDBGameLogo(gameSearchItem.id);
+                if (logo?.success == true && logo.data?.Count > 0)
                 {
                     return logo.data[0].url;
                 }
             }
-            return "bad path";
+
+            return null;
         }
 
         public List<MediaModel> getLogoImages(GenericItemOption searchSelection, string platform, string gameId)
         {
-            if (platform != null && gameId != null)
+            if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                ResponseModel<MediaModel> logo = getSGDBGameLogoByAppId(platform, gameId); //First element of search results, should probably implement fuzzysearchquery based on intentions
-                if (logo.success && logo.data.Count > 0)
+                var logo = getSGDBGameLogoByAppId(platform, gameId);
+                if (logo?.success == true && logo.data?.Count > 0)
                 {
                     return logo.data;
                 }
-                else if (logo.success && logo.data.Count == 0)
-                {
-                    return null;
-                }
-                else
-                {
-                    var sgdbException = new Exception("Service failure during getLogoImages");
-                    throw sgdbException;
-                }
             }
-            else if (searchSelection != null)
+
+            if (searchSelection != null && int.TryParse(searchSelection.Description, out int parsedId))
             {
-                ResponseModel<MediaModel> logo = getSGDBGameLogo(int.Parse(searchSelection.Description));
-                if (logo.success && logo.data.Count > 0)
+                var logo = getSGDBGameLogo(parsedId);
+                if (logo?.success == true && logo.data?.Count > 0)
                 {
                     return logo.data;
                 }
-                else if (logo.success && logo.data.Count == 0)
-                {
-                    return null;
-                }
-                else
-                {
-                    var sgdbException = new Exception("Service failure during getLogoImages");
-                    throw sgdbException;
-                }
             }
-            else
-            {
-                return null;
-            }
+
+            return null;
         }
 
         public string getIconImageUrl(SearchModel gameSearchItem, string platform, string gameId)
         {
-            if (platform != null && gameId != null)
+            if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                ResponseModel<MediaModel> icon = getSGDBGameIconByAppId(platform, gameId); //First element of search results, should probably implement fuzzysearchquery based on intentions
-                if (icon.success && icon.data.Count > 0)
+                var icon = getSGDBGameIconByAppId(platform, gameId);
+                if (icon?.success == true && icon.data?.Count > 0)
                 {
                     return icon.data[0].url;
                 }
             }
-            else if (gameSearchItem != null)
+
+            if (gameSearchItem != null)
             {
-                ResponseModel<MediaModel> icon = getSGDBGameIcon(gameSearchItem.id);
-                if (icon.success && icon.data.Count > 0)
+                var icon = getSGDBGameIcon(gameSearchItem.id);
+                if (icon?.success == true && icon.data?.Count > 0)
                 {
                     return icon.data[0].url;
                 }
             }
-            return "bad path";
+
+            return null;
         }
 
         public List<MediaModel> getIconImages(GenericItemOption searchSelection, string platform, string gameId)
         {
-            if (platform != null && gameId != null)
+            if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                ResponseModel<MediaModel> icon = getSGDBGameIconByAppId(platform, gameId); //First element of search results, should probably implement fuzzysearchquery based on intentions
-                if (icon.success && icon.data.Count > 0)
+                var icon = getSGDBGameIconByAppId(platform, gameId);
+                if (icon?.success == true && icon.data?.Count > 0)
                 {
                     return icon.data;
                 }
-                else if (icon.success && icon.data.Count == 0)
-                {
-                    return null;
-                }
-                else
-                {
-                    var sgdbException = new Exception("Service failure during getIconImages");
-                    throw sgdbException;
-                }
             }
-            else if (searchSelection != null)
+
+            if (searchSelection != null && int.TryParse(searchSelection.Description, out int parsedId))
             {
-                ResponseModel<MediaModel> icon = getSGDBGameIcon(int.Parse(searchSelection.Description));
-                if (icon.success && icon.data.Count > 0)
+                var icon = getSGDBGameIcon(parsedId);
+                if (icon?.success == true && icon.data?.Count > 0)
                 {
                     return icon.data;
                 }
-                else if (icon.success && icon.data.Count == 0)
-                {
-                    return null;
-                }
-                else
-                {
-                    var sgdbException = new Exception("Service failure during getIconImages");
-                    throw sgdbException;
-                }
             }
-            else
-            {
-                return null;
-            }
+
+            return null;
         }
     }
 }

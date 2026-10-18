@@ -1,20 +1,26 @@
-﻿using System;
+using Newtonsoft.Json;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SGDBMetadata
 {
-    public class ResponseModel <T>
+    public class ResponseModel<T>
     {
-        public Boolean success { get; set; }
-        public List<T> data;
+        [JsonProperty("success")]
+        public bool success { get; set; }
 
-        public List<T> NewList
-        {
-            get { return data; }
-            set { data = value; }
-        }
+        [JsonProperty("data")]
+        public List<T> data { get; set; } = new List<T>();
+
+        [JsonProperty("errors")]
+        public List<string> errors { get; set; } = new List<string>();
+
+        [JsonProperty("page")]
+        public int? page { get; set; }
+
+        [JsonProperty("total")]
+        public int? total { get; set; }
+
+        [JsonProperty("limit")]
+        public int? limit { get; set; }
     }
 }

@@ -1,113 +1,212 @@
-﻿using Playnite.SDK;
+using Playnite.SDK;
 using Playnite.SDK.Models;
 using Playnite.SDK.Plugins;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SGDBMetadata
 {
     public class SGDBMetadataProvider : OnDemandMetadataProvider
     {
+        private static readonly ILogger logger = LogManager.GetLogger();
         private readonly MetadataRequestOptions options;
         private readonly SGDBMetadata plugin;
-        private SgdbServiceClient services;
+        private readonly SGDBMetadataSettings settings;
+        private readonly SgdbServiceClient services;
+
         private GenericItemOption searchSelection;
         private SearchModel gameSearchItem;
         private string gamePlatformEnum;
         private List<MetadataField> availableFields;
-        private string iconAssetSelection;
+        private bool hasPromptedGameSelection = false;
+
         private const string demoSuffix = " Demo";
+
         public override List<MetadataField> AvailableFields
         {
             get
             {
-                var logger = LogManager.GetLogger();
-                logger.Info("AvailableFields");
                 if (availableFields == null)
                 {
                     availableFields = GetAvailableFields();
                 }
-
                 return availableFields;
             }
         }
-        public SGDBMetadataProvider(MetadataRequestOptions options, SGDBMetadata plugin, SGDBMetadataSettings settings)
+
+        public SGDBMetadataProvider(MetadataRequestOptions options, SGDBMetadata plugin, SGDBMetadataSettings settings, SgdbServiceClient client)
         {
             this.options = options;
             this.plugin = plugin;
-            this.iconAssetSelection = settings.IconAssetSelection;
-            services = new SgdbServiceClient(settings);
-            var logger = LogManager.GetLogger();
-            logger.Info("SGDB Initialized");
+            this.settings = settings;
+            this.services = client ?? new SgdbServiceClient(settings);
         }
 
-        public void convertPlayniteGamePluginIdToSGDBPlatformEnum(Guid pluginId, string gameId)
+        public void ConvertPlayniteGamePluginIdToSGDBPlatformEnum(Guid pluginId, string gameId)
         {
-            //check for platform "steam""origin""egs""bnet""uplay"
-            // only steam is reliable enough on sgdb
-            // most games are not linked to other platforms
+            if (!settings.EnablePlatformSearch)
+            {
+                return;
+            }
+
             switch (BuiltinExtensions.GetExtensionFromId(pluginId))
             {
                 case BuiltinExtension.SteamLibrary:
-                    //Normal games AppIds don't surpass the max int32 value
-                    //Steam mods seem to use a randomly generated ID that surpass
-                    //that value, so they shouldn't be used for matching.
-                    //Mods should be matched by game name
-
-                    // Demo entries are also ignored to fallback to normal search since
-                    // they won't be matched using ID on SGDB
-                    if (int.TryParse(gameId, out int _) &&
+                    // Normal Steam AppIds are within int32 range; mods or demo entries fallback to title search
+                    if (int.TryParse(gameId, out _) &&
                         !options.GameData.Name.EndsWith(demoSuffix, StringComparison.OrdinalIgnoreCase))
                     {
                         gamePlatformEnum = "steam";
                     }
                     return;
-                case BuiltinExtension.OriginLibrary:
-                    //gamePlatformEnum = "origin";
-                    return;
                 case BuiltinExtension.EpicLibrary:
-                    //gamePlatformEnum = "egs";
+                    gamePlatformEnum = "egs";
+                    return;
+                case BuiltinExtension.OriginLibrary:
+                    gamePlatformEnum = "origin";
                     return;
                 case BuiltinExtension.BattleNetLibrary:
-                    //gamePlatformEnum = "bnet";
+                    gamePlatformEnum = "bnet";
+                    return;
+                case BuiltinExtension.UplayLibrary:
+                    gamePlatformEnum = "uplay";
                     return;
                 default:
                     return;
             }
         }
 
-        // Override additional methods based on supported metadata fields.
+        private List<MetadataField> GetAvailableFields()
+        {
+            if (searchSelection == null && gamePlatformEnum == null)
+            {
+                GetSgdbMetadata();
+            }
+
+            return new List<MetadataField>
+            {
+                MetadataField.CoverImage,
+                MetadataField.BackgroundImage,
+                MetadataField.Icon
+            };
+        }
+
+        private void GetSgdbMetadata()
+        {
+            ConvertPlayniteGamePluginIdToSGDBPlatformEnum(options.GameData.PluginId, options.GameData.GameId);
+            var cleanedUpGameName = CleanupGameName(options.GameData.Name);
+
+            if (!options.IsBackgroundDownload)
+            {
+                if (string.IsNullOrEmpty(gamePlatformEnum))
+                {
+                    PromptChooseGameIfNeeded();
+                }
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(gamePlatformEnum))
+                {
+                    gameSearchItem = services.getGameSGDBFuzzySearch(cleanedUpGameName);
+                }
+            }
+        }
+
+        private void PromptChooseGameIfNeeded()
+        {
+            if (hasPromptedGameSelection || searchSelection != null)
+            {
+                return;
+            }
+
+            hasPromptedGameSelection = true;
+            var cleanedUpGameName = CleanupGameName(options.GameData.Name);
+
+            var initialList = services.getGameListSGDB(cleanedUpGameName)
+                .Select(game => new GenericItemOption(game.name, game.id.ToString()))
+                .ToList();
+
+            var item = plugin.PlayniteApi.Dialogs.ChooseItemWithSearch(initialList, (query) =>
+            {
+                try
+                {
+                    return services.getGameListSGDB(query)
+                        .Select(game => new GenericItemOption(game.name, game.id.ToString()))
+                        .ToList();
+                }
+                catch (Exception ex)
+                {
+                    logger.Warn(ex, $"Failed to search SGDB games for query: {query}");
+                    return new List<GenericItemOption>();
+                }
+            }, cleanedUpGameName, ResourceProvider.GetString("LOCSteamGridDBMetadata_WindowTitleChooseGame"));
+
+            searchSelection = item;
+        }
+
+        private string CleanupGameName(string gameName)
+        {
+            if (string.IsNullOrEmpty(gameName))
+            {
+                return string.Empty;
+            }
+
+            if (gameName.EndsWith(demoSuffix, StringComparison.OrdinalIgnoreCase))
+            {
+                gameName = gameName.Substring(0, gameName.Length - demoSuffix.Length);
+            }
+
+            return gameName.Trim();
+        }
+
         public override MetadataFile GetCoverImage(GetMetadataFieldArgs args)
         {
-            var logger = LogManager.GetLogger();
-            logger.Info("GetCoverImage");
             if (options.IsBackgroundDownload)
             {
-                string gameUrl = services.getCoverImageUrl(gameSearchItem ?? null, gamePlatformEnum ?? null, options.GameData.GameId ?? null);
-                if (gameUrl != "bad path")
+                // 1. Try platform lookup if available
+                string gameUrl = services.getCoverImageUrl(gameSearchItem, gamePlatformEnum, options.GameData.GameId);
+
+                // 2. Fallback to game title search if platform search gave no results
+                if (string.IsNullOrEmpty(gameUrl) && settings.FallbackToTitleSearch)
+                {
+                    if (gameSearchItem == null)
+                    {
+                        gameSearchItem = services.getGameSGDBFuzzySearch(CleanupGameName(options.GameData.Name));
+                    }
+
+                    if (gameSearchItem != null)
+                    {
+                        gameUrl = services.getCoverImageUrl(gameSearchItem, null, null);
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(gameUrl))
                 {
                     return new MetadataFile(gameUrl);
                 }
             }
             else
             {
-                if (AvailableFields.Contains(MetadataField.Name))
+                // Manual selection mode
+                var covers = services.getCoverImages(searchSelection, gamePlatformEnum, options.GameData.GameId);
+
+                // Fallback: If platform ID returned nothing, prompt user to search by title
+                if ((covers == null || covers.Count == 0) && settings.FallbackToTitleSearch && searchSelection == null)
                 {
-                    if (string.IsNullOrEmpty(gamePlatformEnum) == false || searchSelection != null)
+                    PromptChooseGameIfNeeded();
+                    if (searchSelection != null)
                     {
-                        var covers = services.getCoverImages(searchSelection ?? null, gamePlatformEnum ?? null, options.GameData.GameId ?? null);
-                        dynamic selection = null;
-                        if (covers != null)
-                        {
-                            selection = GetCoverManually(covers);
-                        }
-                        if (selection != null || selection?.Path ?? "nopath" != "nopath")
-                        {
-                            return new MetadataFile(selection.FullRes);
-                        }
+                        covers = services.getCoverImages(searchSelection, null, null);
+                    }
+                }
+
+                if (covers != null && covers.Count > 0)
+                {
+                    var selection = GetCoverManually(covers) as ThumbFileOption;
+                    if (selection != null && !string.IsNullOrEmpty(selection.FullRes))
+                    {
+                        return new MetadataFile(selection.FullRes);
                     }
                 }
             }
@@ -119,28 +218,45 @@ namespace SGDBMetadata
         {
             if (options.IsBackgroundDownload)
             {
-                string gameUrl = services.getHeroImageUrl(gameSearchItem ?? null, gamePlatformEnum ?? null, options.GameData.GameId ?? null);
-                if (gameUrl != "bad path")
+                string gameUrl = services.getHeroImageUrl(gameSearchItem, gamePlatformEnum, options.GameData.GameId);
+
+                if (string.IsNullOrEmpty(gameUrl) && settings.FallbackToTitleSearch)
+                {
+                    if (gameSearchItem == null)
+                    {
+                        gameSearchItem = services.getGameSGDBFuzzySearch(CleanupGameName(options.GameData.Name));
+                    }
+
+                    if (gameSearchItem != null)
+                    {
+                        gameUrl = services.getHeroImageUrl(gameSearchItem, null, null);
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(gameUrl))
                 {
                     return new MetadataFile(gameUrl);
                 }
             }
             else
             {
-                if (AvailableFields.Contains(MetadataField.Name))
+                var heroes = services.getHeroImages(searchSelection, gamePlatformEnum, options.GameData.GameId);
+
+                if ((heroes == null || heroes.Count == 0) && settings.FallbackToTitleSearch && searchSelection == null)
                 {
-                    if (string.IsNullOrEmpty(gamePlatformEnum) == false || searchSelection != null)
+                    PromptChooseGameIfNeeded();
+                    if (searchSelection != null)
                     {
-                        var heroes = services.getHeroImages(searchSelection ?? null, gamePlatformEnum ?? null, options.GameData.GameId ?? null);
-                        dynamic selection = null;
-                        if (heroes != null)
-                        {
-                            selection = GetHeroManually(heroes);
-                        }
-                        if (selection != null || selection?.Path ?? "nopath" != "nopath")
-                        {
-                            return new MetadataFile(selection.FullRes);
-                        }
+                        heroes = services.getHeroImages(searchSelection, null, null);
+                    }
+                }
+
+                if (heroes != null && heroes.Count > 0)
+                {
+                    var selection = GetHeroManually(heroes) as ThumbFileOption;
+                    if (selection != null && !string.IsNullOrEmpty(selection.FullRes))
+                    {
+                        return new MetadataFile(selection.FullRes);
                     }
                 }
             }
@@ -150,47 +266,57 @@ namespace SGDBMetadata
 
         public override MetadataFile GetIcon(GetMetadataFieldArgs args)
         {
+            bool useLogos = settings.IconAssetSelection == "logos";
+
             if (options.IsBackgroundDownload)
             {
-                var logger = LogManager.GetLogger();
-                string gameUrl;
-                if (iconAssetSelection == "logos")
+                string gameUrl = useLogos
+                    ? services.getLogoImageUrl(gameSearchItem, gamePlatformEnum, options.GameData.GameId)
+                    : services.getIconImageUrl(gameSearchItem, gamePlatformEnum, options.GameData.GameId);
+
+                if (string.IsNullOrEmpty(gameUrl) && settings.FallbackToTitleSearch)
                 {
-                    gameUrl = services.getLogoImageUrl(gameSearchItem ?? null, gamePlatformEnum ?? null, options.GameData.GameId ?? null);
+                    if (gameSearchItem == null)
+                    {
+                        gameSearchItem = services.getGameSGDBFuzzySearch(CleanupGameName(options.GameData.Name));
+                    }
+
+                    if (gameSearchItem != null)
+                    {
+                        gameUrl = useLogos
+                            ? services.getLogoImageUrl(gameSearchItem, null, null)
+                            : services.getIconImageUrl(gameSearchItem, null, null);
+                    }
                 }
-                else
-                {
-                    gameUrl = services.getIconImageUrl(gameSearchItem ?? null, gamePlatformEnum ?? null, options.GameData.GameId ?? null);
-                }
-                if (gameUrl != "bad path")
+
+                if (!string.IsNullOrEmpty(gameUrl))
                 {
                     return new MetadataFile(gameUrl);
                 }
             }
             else
             {
-                if (AvailableFields.Contains(MetadataField.Name))
+                var icons = useLogos
+                    ? services.getLogoImages(searchSelection, gamePlatformEnum, options.GameData.GameId)
+                    : services.getIconImages(searchSelection, gamePlatformEnum, options.GameData.GameId);
+
+                if ((icons == null || icons.Count == 0) && settings.FallbackToTitleSearch && searchSelection == null)
                 {
-                    if (string.IsNullOrEmpty(gamePlatformEnum) == false || searchSelection != null)
+                    PromptChooseGameIfNeeded();
+                    if (searchSelection != null)
                     {
-                        List<MediaModel> icons;
-                        if (iconAssetSelection == "logos")
-                        {
-                            icons = services.getLogoImages(searchSelection ?? null, gamePlatformEnum ?? null, options.GameData.GameId ?? null);
-                        }
-                        else
-                        {
-                            icons = services.getIconImages(searchSelection ?? null, gamePlatformEnum ?? null, options.GameData.GameId ?? null);
-                        }
-                        dynamic selection = null;
-                        if (icons != null)
-                        {
-                            selection = GetIconManually(icons);
-                        }
-                        if (selection != null || selection?.Path ?? "nopath" != "nopath")
-                        {
-                            return new MetadataFile(selection.FullRes);
-                        }
+                        icons = useLogos
+                            ? services.getLogoImages(searchSelection, null, null)
+                            : services.getIconImages(searchSelection, null, null);
+                    }
+                }
+
+                if (icons != null && icons.Count > 0)
+                {
+                    var selection = GetIconManually(icons) as ThumbFileOption;
+                    if (selection != null && !string.IsNullOrEmpty(selection.FullRes))
+                    {
+                        return new MetadataFile(selection.FullRes);
                     }
                 }
             }
@@ -198,127 +324,55 @@ namespace SGDBMetadata
             return base.GetIcon(args);
         }
 
-        private void GetGame(List<GenericItemOption> gameList, string caption)
-        {
-            var item = plugin.PlayniteApi.Dialogs.ChooseItemWithSearch(gameList, (a) =>
-            {
-                try
-                {
-                    return new List<GenericItemOption>(services.getGameListSGDB(a).Select(game => new GenericItemOption(game.name, game.id.ToString())));
-                }
-                catch
-                {
-                    var sgdbException = new Exception("Service failure.");
-                    throw sgdbException;
-                }
-            }, CleanupGameName(options.GameData.Name), caption);
-            searchSelection = item;
-        }
-
-        private List<MetadataField> GetAvailableFields()
-        {
-            var logger = LogManager.GetLogger();
-            logger.Info("GetAvailableFields");
-            logger.Info("SGDBMetadataProvider GameData:" + options.GameData.ToString());
-            if (searchSelection == null || gamePlatformEnum == null)
-            {
-                GetSgdbMetadata();
-            }
-            var fields = new List<MetadataField> { MetadataField.Name };
-            fields.Add(MetadataField.Icon);
-            fields.Add(MetadataField.BackgroundImage);
-            fields.Add(MetadataField.CoverImage);
-            return fields;
-        }
-
-        private void GetSgdbMetadata()
-        {
-            var logger = LogManager.GetLogger();
-            logger.Info("GetSgdbMetadata");
-
-            convertPlayniteGamePluginIdToSGDBPlatformEnum(options.GameData.PluginId, options.GameData.GameId);
-            var cleanedUpGameName = CleanupGameName(options.GameData.Name);
-            if (!options.IsBackgroundDownload)
-            {
-                if (string.IsNullOrEmpty(gamePlatformEnum))
-                {
-                    var gameList = new List<GenericItemOption>(services.getGameListSGDB(cleanedUpGameName).Select(game => new GenericItemOption(game.name, game.id.ToString())));
-                    GetGame(gameList, ResourceProvider.GetString("LOCSteamGridDBMetadata_WindowTitleChooseGame"));
-                }
-            }
-            else if (string.IsNullOrEmpty(gamePlatformEnum))
-            {
-                gameSearchItem = services.getGameSGDBFuzzySearch(cleanedUpGameName);
-            }
-        }
-
-        private string CleanupGameName(string gameName)
-        {           
-            if (gameName.EndsWith(demoSuffix, StringComparison.OrdinalIgnoreCase))
-            {
-                gameName = gameName.Substring(0, gameName.Length - demoSuffix.Length);
-            }
-
-            return gameName;
-        }
-
         private ImageFileOption GetCoverManually(List<GridModel> possibleCovers)
         {
-            var selection = new List<ImageFileOption>();
-            foreach (var cover in possibleCovers)
+            if (possibleCovers == null || possibleCovers.Count == 0)
             {
-                selection.Add(new ThumbFileOption { Path = cover.thumb, FullRes = cover.url });
+                return null;
             }
-            if (selection.Count > 0)
+
+            var selection = possibleCovers.Select(cover => new ThumbFileOption
             {
-                return plugin.PlayniteApi.Dialogs.ChooseImageFile(
-                    selection, ResourceProvider.GetString("LOCSteamGridDBMetadata_WindowTitleChooseCover"));
-            }
-            else
-            {
-                return new ImageFileOption("nopath");
-            }
+                Path = cover.thumb,
+                FullRes = cover.url
+            }).Cast<ImageFileOption>().ToList();
+
+            return plugin.PlayniteApi.Dialogs.ChooseImageFile(
+                selection, ResourceProvider.GetString("LOCSteamGridDBMetadata_WindowTitleChooseCover"));
         }
 
         private ImageFileOption GetHeroManually(List<HeroModel> possibleHeroes)
         {
-            var selection = new List<ImageFileOption>();
-            foreach (var hero in possibleHeroes)
+            if (possibleHeroes == null || possibleHeroes.Count == 0)
             {
-                selection.Add(new ThumbFileOption { Path = hero.thumb, FullRes = hero.url });
-            }
-            if (selection.Count > 0)
-            {
-                return plugin.PlayniteApi.Dialogs.ChooseImageFile(
-                selection, ResourceProvider.GetString("LOCSteamGridDBMetadata_WindowTitleChooseBackground"));
-            }
-            else
-            {
-                return new ImageFileOption("nopath");
+                return null;
             }
 
+            var selection = possibleHeroes.Select(hero => new ThumbFileOption
+            {
+                Path = hero.thumb,
+                FullRes = hero.url
+            }).Cast<ImageFileOption>().ToList();
+
+            return plugin.PlayniteApi.Dialogs.ChooseImageFile(
+                selection, ResourceProvider.GetString("LOCSteamGridDBMetadata_WindowTitleChooseBackground"));
         }
 
         private ImageFileOption GetIconManually(List<MediaModel> possibleIcons)
         {
-            var selection = new List<ImageFileOption>();
-            foreach (var icon in possibleIcons)
+            if (possibleIcons == null || possibleIcons.Count == 0)
             {
-                selection.Add(new ThumbFileOption
-                {
-                    Path = icon.thumb,
-                    FullRes = icon.url
-                });
+                return null;
             }
-            if (selection.Count > 0)
+
+            var selection = possibleIcons.Select(icon => new ThumbFileOption
             {
-                return plugin.PlayniteApi.Dialogs.ChooseImageFile(
+                Path = icon.thumb,
+                FullRes = icon.url
+            }).Cast<ImageFileOption>().ToList();
+
+            return plugin.PlayniteApi.Dialogs.ChooseImageFile(
                 selection, ResourceProvider.GetString("LOCSteamGridDBMetadata_WindowTitleChooseIcon"));
-            }
-            else
-            {
-                return new ImageFileOption("nopath");
-            }
         }
     }
 }

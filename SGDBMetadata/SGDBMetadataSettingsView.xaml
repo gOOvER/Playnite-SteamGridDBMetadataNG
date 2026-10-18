@@ -1,125 +1,174 @@
-﻿<UserControl x:Class="SGDBMetadata.SGDBMetadataSettingsView"
+<UserControl x:Class="SGDBMetadata.SGDBMetadataSettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
-             d:DesignHeight="400" d:DesignWidth="600">
-    <ScrollViewer>
+             d:DesignHeight="800" d:DesignWidth="650">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="20">
-            <DockPanel>
-                <TextBlock Text="{DynamicResource LOCSteamGridDBMetadata_SettingApiKey}" DockPanel.Dock="Left" VerticalAlignment="Center"/>
+            <!-- API Key -->
+            <DockPanel LastChildFill="True">
+                <TextBlock Text="{DynamicResource LOCSteamGridDBMetadata_SettingApiKey}" DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="SemiBold"/>
                 <Button Content="{DynamicResource LOCSteamGridDBMetadata_SettingGetApiKeyButton}" DockPanel.Dock="Right" VerticalAlignment="Center"
-                        Command="{Binding LoginCommand}" Margin="10,0,0,0"/>
-                <TextBox Name="AccountAccessCode" Text="{Binding Settings.ApiKey}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                        Command="{Binding LoginCommand}" Margin="10,0,0,0" Padding="12,4"/>
+                <TextBox Name="AccountAccessCode" Text="{Binding Settings.ApiKey, UpdateSourceTrigger=PropertyChanged}" Margin="10,0,0,0" VerticalAlignment="Center"/>
             </DockPanel>
 
-            <Label Content="{DynamicResource LOCSteamGridDBMetadata_SettingCoverLabel}" Margin="0,15,0,0"/>
+            <!-- General / Matching Settings -->
+            <Label Content="{DynamicResource LOCSteamGridDBMetadata_SettingGeneralLabel}" Margin="0,18,0,0" FontWeight="Bold"/>
             <Separator/>
-            <Grid>
+            <StackPanel Margin="0,8,0,0">
+                <CheckBox IsChecked="{Binding Settings.EnablePlatformSearch}"
+                          Content="{DynamicResource LOCSteamGridDBMetadata_SettingEnablePlatformSearch}"
+                          Margin="0,4,0,4"/>
+                <CheckBox IsChecked="{Binding Settings.FallbackToTitleSearch}"
+                          Content="{DynamicResource LOCSteamGridDBMetadata_SettingFallbackToTitleSearch}"
+                          Margin="0,4,0,4"/>
+            </StackPanel>
+
+            <!-- Cover Settings -->
+            <Label Content="{DynamicResource LOCSteamGridDBMetadata_SettingCoverLabel}" Margin="0,18,0,0" FontWeight="Bold"/>
+            <Separator/>
+            <Grid Margin="0,8,0,0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="170"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <TextBlock Grid.Column="0" Grid.Row="0" Text="{DynamicResource LOCSteamGridDBMetadata_SettingStyleLabel}" Margin="0,11,0.2,31" Grid.RowSpan="2"/>
+
+                <TextBlock Grid.Column="0" Grid.Row="0" Text="{DynamicResource LOCSteamGridDBMetadata_SettingStyleLabel}" VerticalAlignment="Center" Margin="0,6"/>
                 <ComboBox x:Name="cmbCoverStyles" Grid.Column="1" Grid.Row="0"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.CoverStyle}" Margin="10,10,0,0" />
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.CoverStyle}" Margin="10,4,0,4"/>
 
-                <TextBlock Grid.Column="0" Grid.Row="1" Text="{DynamicResource LOCSteamGridDBMetadata_SettingDimensionLabel}" Margin="0,10,0,0"/>
+                <TextBlock Grid.Column="0" Grid.Row="1" Text="{DynamicResource LOCSteamGridDBMetadata_SettingDimensionLabel}" VerticalAlignment="Center" Margin="0,6"/>
                 <ComboBox x:Name="cmbCoverDimensions" Grid.Column="1" Grid.Row="1"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.CoverDimension}" Margin="10,10,0,0"/>
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.CoverDimension}" Margin="10,4,0,4"/>
 
-                <TextBlock Grid.Column="0" Grid.Row="2" Text="{DynamicResource LOCSteamGridDBMetadata_SettingAdultContentLabel}" Margin="0,10,0,0"/>
-                <ComboBox x:Name="cmbCoverNsfw" Grid.Column="1" Grid.Row="2"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.CoverNsfw}" Margin="10,10,0,0"/>
+                <TextBlock Grid.Column="0" Grid.Row="2" Text="{DynamicResource LOCSteamGridDBMetadata_SettingTypeLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbCoverType" Grid.Column="1" Grid.Row="2"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.CoverType}" Margin="10,4,0,4"/>
 
-                <TextBlock Grid.Column="0" Grid.Row="3" Text="{DynamicResource LOCSteamGridDBMetadata_SettingHumorContentLabel}" Margin="0,10,0,0"/>
-                <ComboBox x:Name="cmbCoverHumor" Grid.Column="1" Grid.Row="3"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.CoverHumor}" Margin="10,10,0,0"/>
+                <TextBlock Grid.Column="0" Grid.Row="3" Text="{DynamicResource LOCSteamGridDBMetadata_SettingAdultContentLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbCoverNsfw" Grid.Column="1" Grid.Row="3"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.CoverNsfw}" Margin="10,4,0,4"/>
+
+                <TextBlock Grid.Column="0" Grid.Row="4" Text="{DynamicResource LOCSteamGridDBMetadata_SettingHumorContentLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbCoverHumor" Grid.Column="1" Grid.Row="4"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.CoverHumor}" Margin="10,4,0,4"/>
+
+                <TextBlock Grid.Column="0" Grid.Row="5" Text="{DynamicResource LOCSteamGridDBMetadata_SettingEpilepsyContentLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbCoverEpilepsy" Grid.Column="1" Grid.Row="5"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.CoverEpilepsy}" Margin="10,4,0,4"/>
             </Grid>
 
-            <Label Content="{DynamicResource LOCSteamGridDBMetadata_SettingBackgroundLabel}" Margin="0,15,0,0"/>
+            <!-- Background Image Settings -->
+            <Label Content="{DynamicResource LOCSteamGridDBMetadata_SettingBackgroundLabel}" Margin="0,18,0,0" FontWeight="Bold"/>
             <Separator/>
-            <Grid>
+            <Grid Margin="0,8,0,0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="170"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <TextBlock Grid.Column="0" Grid.Row="0" Text="{DynamicResource LOCSteamGridDBMetadata_SettingStyleLabel}" Margin="0,10,0,0"/>
+
+                <TextBlock Grid.Column="0" Grid.Row="0" Text="{DynamicResource LOCSteamGridDBMetadata_SettingStyleLabel}" VerticalAlignment="Center" Margin="0,6"/>
                 <ComboBox x:Name="cmbBackgroundStyles" Grid.Column="1" Grid.Row="0"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.BackgroundStyle}" Margin="10,10,0,0" />
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.BackgroundStyle}" Margin="10,4,0,4"/>
 
-                <TextBlock Grid.Column="0" Grid.Row="1" Text="{DynamicResource LOCSteamGridDBMetadata_SettingDimensionLabel}" Margin="0,10,0,0"/>
+                <TextBlock Grid.Column="0" Grid.Row="1" Text="{DynamicResource LOCSteamGridDBMetadata_SettingDimensionLabel}" VerticalAlignment="Center" Margin="0,6"/>
                 <ComboBox x:Name="cmbBackgroundDimensions" Grid.Column="1" Grid.Row="1"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.BackgroundDimension}" Margin="10,10,0,0"/>
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.BackgroundDimension}" Margin="10,4,0,4"/>
 
-                <TextBlock Grid.Column="0" Grid.Row="2" Text="{DynamicResource LOCSteamGridDBMetadata_SettingAdultContentLabel}" Margin="0,10,0,0"/>
-                <ComboBox x:Name="cmbBackgroundNsfw" Grid.Column="1" Grid.Row="2"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.BackgroundNsfw}" Margin="10,10,0,0"/>
+                <TextBlock Grid.Column="0" Grid.Row="2" Text="{DynamicResource LOCSteamGridDBMetadata_SettingTypeLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbBackgroundType" Grid.Column="1" Grid.Row="2"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.BackgroundType}" Margin="10,4,0,4"/>
 
-                <TextBlock Grid.Column="0" Grid.Row="3" Text="{DynamicResource LOCSteamGridDBMetadata_SettingHumorContentLabel}" Margin="0,10,0,0"/>
-                <ComboBox x:Name="cmbBackgroundHumor" Grid.Column="1" Grid.Row="3"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.BackgroundHumor}" Margin="10,10,0,0"/>
+                <TextBlock Grid.Column="0" Grid.Row="3" Text="{DynamicResource LOCSteamGridDBMetadata_SettingAdultContentLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbBackgroundNsfw" Grid.Column="1" Grid.Row="3"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.BackgroundNsfw}" Margin="10,4,0,4"/>
+
+                <TextBlock Grid.Column="0" Grid.Row="4" Text="{DynamicResource LOCSteamGridDBMetadata_SettingHumorContentLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbBackgroundHumor" Grid.Column="1" Grid.Row="4"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.BackgroundHumor}" Margin="10,4,0,4"/>
+
+                <TextBlock Grid.Column="0" Grid.Row="5" Text="{DynamicResource LOCSteamGridDBMetadata_SettingEpilepsyContentLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbBackgroundEpilepsy" Grid.Column="1" Grid.Row="5"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.BackgroundEpilepsy}" Margin="10,4,0,4"/>
             </Grid>
 
-            <Label Content="{DynamicResource LOCSteamGridDBMetadata_SettingIconLabel}" Margin="0,15,0,0"/>
+            <!-- Icon / Logo Settings -->
+            <Label Content="{DynamicResource LOCSteamGridDBMetadata_SettingIconLabel}" Margin="0,18,0,0" FontWeight="Bold"/>
             <Separator/>
-            <Grid>
+            <Grid Margin="0,8,0,0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="170"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Column="0" Grid.Row="0" Text="Asset:" Margin="0,10,0,0"/>
+                <TextBlock Grid.Column="0" Grid.Row="0" Text="{DynamicResource LOCSteamGridDBMetadata_SettingIconAssetLabel}" VerticalAlignment="Center" Margin="0,6"/>
                 <ComboBox x:Name="cmbIconAssetSelection" Grid.Column="1" Grid.Row="0"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.IconAssetSelection}" Margin="10,10,0,0"/>
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.IconAssetSelection}" Margin="10,4,0,4"/>
 
-                <TextBlock Grid.Column="0" Grid.Row="1" Text="{DynamicResource LOCSteamGridDBMetadata_SettingAdultContentLabel}" Margin="0,10,0,0"/>
-                <ComboBox x:Name="cmbIconNsfw" Grid.Column="1" Grid.Row="1"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.IconNsfw}" Margin="10,10,0,0"/>
+                <TextBlock Grid.Column="0" Grid.Row="1" Text="{DynamicResource LOCSteamGridDBMetadata_SettingStyleLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbIconStyles" Grid.Column="1" Grid.Row="1"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.IconStyle}" Margin="10,4,0,4"/>
 
-                <TextBlock Grid.Column="0" Grid.Row="2" Text="{DynamicResource LOCSteamGridDBMetadata_SettingHumorContentLabel}" Margin="0,10,0,0"/>
-                <ComboBox x:Name="cmbIconHumor" Grid.Column="1" Grid.Row="2"
-                        DisplayMemberPath="Value"
-                        SelectedValuePath="Key"
-                        SelectedValue="{Binding Settings.IconHumor}" Margin="10,10,0,0"/>
+                <TextBlock Grid.Column="0" Grid.Row="2" Text="{DynamicResource LOCSteamGridDBMetadata_SettingTypeLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbIconType" Grid.Column="1" Grid.Row="2"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.IconType}" Margin="10,4,0,4"/>
+
+                <TextBlock Grid.Column="0" Grid.Row="3" Text="{DynamicResource LOCSteamGridDBMetadata_SettingAdultContentLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbIconNsfw" Grid.Column="1" Grid.Row="3"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.IconNsfw}" Margin="10,4,0,4"/>
+
+                <TextBlock Grid.Column="0" Grid.Row="4" Text="{DynamicResource LOCSteamGridDBMetadata_SettingHumorContentLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbIconHumor" Grid.Column="1" Grid.Row="4"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.IconHumor}" Margin="10,4,0,4"/>
+
+                <TextBlock Grid.Column="0" Grid.Row="5" Text="{DynamicResource LOCSteamGridDBMetadata_SettingEpilepsyContentLabel}" VerticalAlignment="Center" Margin="0,6"/>
+                <ComboBox x:Name="cmbIconEpilepsy" Grid.Column="1" Grid.Row="5"
+                          DisplayMemberPath="Value" SelectedValuePath="Key"
+                          SelectedValue="{Binding Settings.IconEpilepsy}" Margin="10,4,0,4"/>
             </Grid>
         </StackPanel>
     </ScrollViewer>

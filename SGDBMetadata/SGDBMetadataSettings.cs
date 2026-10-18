@@ -1,36 +1,47 @@
-﻿using Playnite.SDK;
+using Playnite.SDK;
 using Playnite.SDK.Data;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace SGDBMetadata
 {
     public class SGDBMetadataSettings
     {
         public string ApiKey { get; set; } = string.Empty;
+
+        // Covers
         public string CoverStyle { get; set; } = "any";
         public string CoverDimension { get; set; } = "600x900";
         public string CoverNsfw { get; set; } = "false";
         public string CoverHumor { get; set; } = "false";
+        public string CoverEpilepsy { get; set; } = "false";
+        public string CoverType { get; set; } = "any";
+
+        // Backgrounds (Heroes)
         public string BackgroundStyle { get; set; } = "any";
         public string BackgroundDimension { get; set; } = "any";
         public string BackgroundNsfw { get; set; } = "false";
         public string BackgroundHumor { get; set; } = "false";
+        public string BackgroundEpilepsy { get; set; } = "false";
+        public string BackgroundType { get; set; } = "any";
+
+        // Icons / Logos
         public string IconAssetSelection { get; set; } = "icons";
+        public string IconStyle { get; set; } = "any";
         public string IconNsfw { get; set; } = "false";
         public string IconHumor { get; set; } = "false";
+        public string IconEpilepsy { get; set; } = "false";
+        public string IconType { get; set; } = "any";
 
-        // Playnite serializes settings object to a JSON object and saves it as text file.
-        // If you want to exclude some property from being saved then use `JsonDontSerialize` ignore attribute.
-        [DontSerialize]
-        public bool OptionThatWontBeSaved { get; set; } = false;
+        // Search & Platform Options
+        public bool EnablePlatformSearch { get; set; } = true;
+        public bool FallbackToTitleSearch { get; set; } = true;
     }
 
     public class SGDBMetadataSettingsViewModel : ObservableObject, ISettings
     {
+        private static readonly ILogger logger = LogManager.GetLogger();
         private readonly SGDBMetadata plugin;
         private SGDBMetadataSettings editingClone { get; set; }
 
@@ -47,13 +58,9 @@ namespace SGDBMetadata
 
         public SGDBMetadataSettingsViewModel(SGDBMetadata plugin)
         {
-            // Injecting your plugin instance is required for Save/Load method because Playnite saves data to a location based on what plugin requested the operation.
             this.plugin = plugin;
-
-            // Load saved settings.
             var savedSettings = plugin.LoadPluginSettings<SGDBMetadataSettings>();
 
-            // LoadPluginSettings returns null if not saved data is available.
             if (savedSettings != null)
             {
                 Settings = savedSettings;
@@ -66,29 +73,23 @@ namespace SGDBMetadata
 
         public void BeginEdit()
         {
-            // Code executed when settings view is opened and user starts editing values.
             editingClone = Serialization.GetClone(Settings);
         }
 
         public void CancelEdit()
         {
-            // Code executed when user decides to cancel any changes made since BeginEdit was called.
-            // This method should revert any changes made to Option1 and Option2.
             Settings = editingClone;
         }
 
         public void EndEdit()
         {
-            // Code executed when user decides to confirm changes made since BeginEdit was called.
-            // This method should save settings made to Option1 and Option2.
             plugin.SavePluginSettings(Settings);
+            // Notify service client of updated settings / API key
+            plugin.UpdateSettings(Settings);
         }
 
         public bool VerifySettings(out List<string> errors)
         {
-            // Code execute when user decides to confirm changes made since BeginEdit was called.
-            // Executed before EndEdit is called and EndEdit is not called if false is returned.
-            // List of errors is presented to user if verification fails.
             errors = new List<string>();
             return true;
         }
@@ -103,7 +104,18 @@ namespace SGDBMetadata
 
         private void Login()
         {
-            System.Diagnostics.Process.Start(@"https://www.steamgriddb.com/profile/preferences/api");
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://www.steamgriddb.com/profile/preferences/api",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Failed to open SteamGridDB API key preferences in default browser.");
+            }
         }
     }
 }

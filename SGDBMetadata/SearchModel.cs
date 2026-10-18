@@ -1,24 +1,24 @@
-﻿using System;
+using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SGDBMetadata
 {
     public class SearchModel
     {
-        /*
-         * "id": 1673,
-            "name": "The Legend of Zelda: Four Swords Adventures",
-            "release_date": 0,
-            "types": [],
-            "verified": true
-         */
+        [JsonProperty("id")]
         public int id { get; set; }
+
+        [JsonProperty("name")]
         public string name { get; set; }
-        public int release_data { get; set; }
-        public string[] types { get; set; }
-        public Boolean verified { get; set; }
+
+        [JsonProperty("release_date")]
+        public long? release_date { get; set; }
+
+        [JsonProperty("types")]
+        public List<string> types { get; set; } = new List<string>();
+
+        [JsonProperty("verified")]
+        public bool verified { get; set; }
     }
 }

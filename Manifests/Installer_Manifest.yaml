@@ -1,4 +1,4 @@
-﻿AddonId: SteamGridDB_Playnite_Metadata
+AddonId: SteamGridDB_Playnite_Metadata
 Packages:
   - Version: 1.0
     RequiredApiVersion: 6.0.0
@@ -23,3 +23,17 @@ Packages:
     Changelog:
       - 'Fixed: Error when obtaining metadata for Steam demos'
       - 'Changed: Demo suffix will now be removed during the initial game search to provide better results from SteamGridDB in cases where the Playnite game entry is a demo'
+  - Version: 1.0.0
+    RequiredApiVersion: 6.0.0
+    ReleaseDate: 2026-10-18
+    PackageUrl: https://github.com/gOOvER/Playnite-SteamGridDBMetadataNG/releases/download/1.0.0/SteamGridDB_Playnite_Metadata_1.0.0.pext
+    Changelog:
+      - 'Added: Multi-platform matching (Steam, Epic, Origin, Battle.net, Ubisoft)'
+      - 'Added: Automatic fallback to game title search when platform search returns 0 results'
+      - 'Added: Epilepsy and image type (static/animated) filters'
+      - 'Added: Rate limit backoff retry handling (HTTP 429)'
+      - 'Fixed: Hero background image 404 URL path resolution error'
+      - 'Fixed: Crash on games not found in SteamGridDB'
+      - 'Fixed: Unhandled RuntimeBinderException during manual image selection'
+      - 'Fixed: Path-traversal and URL injection in search autocomplete'
+      - 'Changed: Modernized project to SDK-style targeting .NET 4.6.2 and PlayniteSDK 6.18.0'

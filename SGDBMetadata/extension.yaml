@@ -1,7 +1,12 @@
-﻿Id: SteamGridDB_Playnite_Metadata
-Name: SteamGridDB Metadata Provider
-Author: cooperate
-Version: 1.2
+Id: SteamGridDB_Playnite_Metadata
+Name: SteamGridDB Metadata Provider NG
+Author: gOOvER
+Version: 1.0.0
 Module: SGDBMetadata.dll
 Type: MetadataProvider
 Icon: icon.png
+Links:
+  - Name: Website
+    Url: https://playnite.goover.dev
+  - Name: GitHub
+    Url: https://github.com/gOOvER/Playnite-SteamGridDBMetadataNG
