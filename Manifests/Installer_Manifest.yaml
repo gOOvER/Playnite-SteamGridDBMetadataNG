@@ -37,3 +37,13 @@ Packages:
       - 'Fixed: Unhandled RuntimeBinderException during manual image selection'
       - 'Fixed: Path-traversal and URL injection in search autocomplete'
       - 'Changed: Modernized project to SDK-style targeting .NET 4.6.2 and PlayniteSDK 6.18.0'
+  - Version: 1.0.1
+    RequiredApiVersion: 6.0.0
+    ReleaseDate: 2026-10-18
+    PackageUrl: https://github.com/gOOvER/Playnite-SteamGridDBMetadataNG/releases/download/1.0.1/SteamGridDB_Playnite_Metadata_1.0.1.pext
+    Changelog:
+      - 'Added: Pagination support loading up to 150 items for manual image selection (fixes upstream issues #30, #35, PR #32)'
+      - 'Added: Setting to automatically add SteamGridDB game page link to game links (fixes upstream issue #25)'
+      - 'Fixed: Any filter for Adult Content and Humor now explicitly sends nsfw=any and humor=any (fixes upstream issue #31)'
+      - 'Fixed: Safe Steam AppId integer parsing and platform mod handling (fixes upstream issue #22)'
+      - 'Fixed: Robust HTTP error response handling for non-JSON 404/500 pages (fixes upstream issue #15, #24)'

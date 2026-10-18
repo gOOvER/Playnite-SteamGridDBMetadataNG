@@ -8,6 +8,7 @@
     <sys:String x:Key="LOCSteamGridDBMetadata_SettingGeneralLabel">General &amp; Matching Settings</sys:String>
     <sys:String x:Key="LOCSteamGridDBMetadata_SettingEnablePlatformSearch">Match games using platform ID (Steam, Epic, Origin, Battle.net, Ubisoft)</sys:String>
     <sys:String x:Key="LOCSteamGridDBMetadata_SettingFallbackToTitleSearch">Fall back to game name search when platform ID yields no artwork</sys:String>
+    <sys:String x:Key="LOCSteamGridDBMetadata_SettingAddSteamGridDbLink">Add SteamGridDB link to game upon metadata download</sys:String>
 
     <sys:String x:Key="LOCSteamGridDBMetadata_SettingCoverLabel">Cover Settings</sys:String>
     <sys:String x:Key="LOCSteamGridDBMetadata_SettingBackgroundLabel">Background Image (Hero) Settings</sys:String>

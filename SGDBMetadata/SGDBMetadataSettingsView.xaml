@@ -25,6 +25,9 @@
                 <CheckBox IsChecked="{Binding Settings.FallbackToTitleSearch}"
                           Content="{DynamicResource LOCSteamGridDBMetadata_SettingFallbackToTitleSearch}"
                           Margin="0,4,0,4"/>
+                <CheckBox IsChecked="{Binding Settings.AddSteamGridDbLink}"
+                          Content="{DynamicResource LOCSteamGridDBMetadata_SettingAddSteamGridDbLink}"
+                          Margin="0,4,0,4"/>
             </StackPanel>
 
             <!-- Cover Settings -->

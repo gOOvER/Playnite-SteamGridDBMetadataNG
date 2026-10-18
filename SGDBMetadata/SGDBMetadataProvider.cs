@@ -84,12 +84,19 @@ namespace SGDBMetadata
                 GetSgdbMetadata();
             }
 
-            return new List<MetadataField>
+            var fields = new List<MetadataField>
             {
                 MetadataField.CoverImage,
                 MetadataField.BackgroundImage,
                 MetadataField.Icon
             };
+
+            if (settings.AddSteamGridDbLink)
+            {
+                fields.Add(MetadataField.Links);
+            }
+
+            return fields;
         }
 
         private void GetSgdbMetadata()
@@ -356,6 +363,59 @@ namespace SGDBMetadata
 
             return plugin.PlayniteApi.Dialogs.ChooseImageFile(
                 selection, ResourceProvider.GetString("LOCSteamGridDBMetadata_WindowTitleChooseBackground"));
+        }
+
+        public override IEnumerable<Link> GetLinks(GetMetadataFieldArgs args)
+        {
+            if (!settings.AddSteamGridDbLink)
+            {
+                return base.GetLinks(args);
+            }
+
+            int? sgdbId = GetSgdbGameId();
+            if (sgdbId.HasValue && sgdbId.Value > 0)
+            {
+                return new List<Link>
+                {
+                    new Link("SteamGridDB", $"https://www.steamgriddb.com/game/{sgdbId.Value}")
+                };
+            }
+
+            return base.GetLinks(args);
+        }
+
+        private int? GetSgdbGameId()
+        {
+            if (searchSelection != null && int.TryParse(searchSelection.Description, out int parsedId))
+            {
+                return parsedId;
+            }
+
+            if (gameSearchItem != null && gameSearchItem.id > 0)
+            {
+                return gameSearchItem.id;
+            }
+
+            if (!string.IsNullOrEmpty(gamePlatformEnum) && !string.IsNullOrEmpty(options.GameData.GameId))
+            {
+                var game = services.getGameByAppId(gamePlatformEnum, options.GameData.GameId);
+                if (game != null && game.id > 0)
+                {
+                    gameSearchItem = game;
+                    return game.id;
+                }
+            }
+
+            if (settings.FallbackToTitleSearch)
+            {
+                gameSearchItem = services.getGameSGDBFuzzySearch(CleanupGameName(options.GameData.Name));
+                if (gameSearchItem != null && gameSearchItem.id > 0)
+                {
+                    return gameSearchItem.id;
+                }
+            }
+
+            return null;
         }
 
         private ImageFileOption GetIconManually(List<MediaModel> possibleIcons)

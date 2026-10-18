@@ -23,4 +23,16 @@ namespace SGDBMetadata
         [JsonProperty("limit")]
         public int? limit { get; set; }
     }
+
+    public class SingleResponseModel<T>
+    {
+        [JsonProperty("success")]
+        public bool success { get; set; }
+
+        [JsonProperty("data")]
+        public T data { get; set; }
+
+        [JsonProperty("errors")]
+        public List<string> errors { get; set; } = new List<string>();
+    }
 }

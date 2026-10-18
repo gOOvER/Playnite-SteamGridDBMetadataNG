@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-18
+
+### Added
+- **Multi-Page Pagination**: Added paged SteamGridDB API requests (`ExecutePaged<T>`) loading up to 150 items (`MaxSearchPages` = 3) for manual image selection dialogs, ensuring images beyond the first 50 results (including community artwork with fewer upvotes) are accessible (resolves upstream issues #30, #35 and PR #32).
+- **SteamGridDB Game Link**: Added option and implementation to automatically add a direct link to the game's SteamGridDB page (`https://www.steamgriddb.com/game/{id}`) in Playnite's game links (resolves upstream issue #25).
+
+### Fixed
+- **Adult Content & Humor "Any" Filter**: Fixed filter bug where selecting "any" omitted the parameter causing SteamGridDB API v2 to default to `false`. Explicit `nsfw=any` and `humor=any` query parameters are now sent (resolves upstream issue #31).
+- **Steam AppId Parsing**: Hardened numeric ID checks with `int.TryParse` to prevent unhandled format exceptions on custom mods or non-numeric Steam game IDs (resolves upstream issue #22).
+- **Non-JSON HTTP Error Responses**: Added explicit HTTP status guards and try/catch around JSON deserialization to gracefully handle HTML 404/500 error pages without crashing (resolves upstream issues #15, #24).
+
 ## [1.0.0] - 2026-10-18
 
 ### Added

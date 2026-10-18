@@ -19,7 +19,8 @@ namespace SGDBMetadata
         {
             MetadataField.CoverImage,
             MetadataField.BackgroundImage,
-            MetadataField.Icon
+            MetadataField.Icon,
+            MetadataField.Links
         };
 
         public override string Name => "SteamGridDB";

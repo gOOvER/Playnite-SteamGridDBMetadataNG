@@ -37,6 +37,8 @@ namespace SGDBMetadata
         // Search & Platform Options
         public bool EnablePlatformSearch { get; set; } = true;
         public bool FallbackToTitleSearch { get; set; } = true;
+        public bool AddSteamGridDbLink { get; set; } = true;
+        public int MaxSearchPages { get; set; } = 3;
     }
 
     public class SGDBMetadataSettingsViewModel : ObservableObject, ISettings

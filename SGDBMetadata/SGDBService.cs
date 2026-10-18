@@ -93,6 +93,45 @@ namespace SGDBMetadata
             }
         }
 
+        public ResponseModel<T> ExecutePaged<T>(RestRequest request, int? maxPagesOverride = null) where T : new()
+        {
+            int maxPages = maxPagesOverride ?? Math.Max(1, settings.MaxSearchPages);
+            var combinedResponse = new ResponseModel<T>();
+            int page = 0;
+
+            while (page < maxPages)
+            {
+                request.AddOrUpdateParameter("page", page.ToString(), ParameterType.QueryString);
+                var response = Execute<ResponseModel<T>>(request);
+
+                if (response?.success != true || response.data == null || response.data.Count == 0)
+                {
+                    break;
+                }
+
+                combinedResponse.success = true;
+                combinedResponse.data.AddRange(response.data);
+                combinedResponse.total = response.total;
+                combinedResponse.limit = response.limit;
+                combinedResponse.page = page;
+
+                if (response.total.HasValue && combinedResponse.data.Count >= response.total.Value)
+                {
+                    break;
+                }
+
+                int limit = response.limit ?? 50;
+                if (response.data.Count < limit)
+                {
+                    break;
+                }
+
+                page++;
+            }
+
+            return combinedResponse;
+        }
+
         public ResponseModel<SearchModel> getSGDBGames(string searchName)
         {
             if (string.IsNullOrWhiteSpace(searchName))
@@ -107,23 +146,49 @@ namespace SGDBMetadata
             return Execute<ResponseModel<SearchModel>>(request) ?? new ResponseModel<SearchModel>();
         }
 
-        public ResponseModel<GridModel> getSGDBGameGridByAppId(string platform, string gameId)
+        public SearchModel getGameByAppId(string platform, string gameId)
+        {
+            if (string.IsNullOrEmpty(platform) || string.IsNullOrEmpty(gameId))
+            {
+                return null;
+            }
+
+            try
+            {
+                var request = new RestRequest("games/{platform}/{gameId}", Method.GET);
+                request.AddUrlSegment("platform", platform);
+                request.AddUrlSegment("gameId", gameId);
+                var response = Execute<SingleResponseModel<SearchModel>>(request);
+                if (response?.success == true && response.data != null)
+                {
+                    return response.data;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.Warn(ex, $"Failed to get game by platform {platform} and id {gameId}");
+            }
+
+            return null;
+        }
+
+        public ResponseModel<GridModel> getSGDBGameGridByAppId(string platform, string gameId, bool paged = false)
         {
             var request = new RestRequest("grids/{platform}/{gameId}", Method.GET);
             request.AddUrlSegment("platform", platform);
             request.AddUrlSegment("gameId", gameId);
             ApplyCoverFilters(request);
 
-            return Execute<ResponseModel<GridModel>>(request) ?? new ResponseModel<GridModel>();
+            return paged ? ExecutePaged<GridModel>(request) : (Execute<ResponseModel<GridModel>>(request) ?? new ResponseModel<GridModel>());
         }
 
-        public ResponseModel<GridModel> getSGDBGameGridCover(int gameId)
+        public ResponseModel<GridModel> getSGDBGameGridCover(int gameId, bool paged = false)
         {
             var request = new RestRequest("grids/game/{id}", Method.GET);
             request.AddUrlSegment("id", gameId.ToString());
             ApplyCoverFilters(request);
 
-            return Execute<ResponseModel<GridModel>>(request) ?? new ResponseModel<GridModel>();
+            return paged ? ExecutePaged<GridModel>(request) : (Execute<ResponseModel<GridModel>>(request) ?? new ResponseModel<GridModel>());
         }
 
         private void ApplyCoverFilters(RestRequest request)
@@ -140,38 +205,45 @@ namespace SGDBMetadata
             {
                 request.AddQueryParameter("types", settings.CoverType);
             }
-            if (settings.CoverNsfw != "any")
+            if (!string.IsNullOrEmpty(settings.CoverNsfw))
             {
                 request.AddQueryParameter("nsfw", settings.CoverNsfw);
             }
-            if (settings.CoverHumor != "any")
+            if (!string.IsNullOrEmpty(settings.CoverHumor))
             {
                 request.AddQueryParameter("humor", settings.CoverHumor);
             }
-            if (settings.CoverEpilepsy != "any")
+            if (!string.IsNullOrEmpty(settings.CoverEpilepsy))
             {
-                request.AddQueryParameter("epilepsy", settings.CoverEpilepsy);
+                if (settings.CoverEpilepsy == "any" || settings.CoverEpilepsy == "true")
+                {
+                    request.AddQueryParameter("epilepsy", "true");
+                }
+                else
+                {
+                    request.AddQueryParameter("epilepsy", "false");
+                }
             }
         }
 
-        public ResponseModel<HeroModel> getSGDBGameHero(int gameId)
+        public ResponseModel<HeroModel> getSGDBGameHero(int gameId, bool paged = false)
         {
             // Note: Relative path without leading slash prevents stripping /api/v2/
             var request = new RestRequest("heroes/game/{id}", Method.GET);
             request.AddUrlSegment("id", gameId.ToString());
             ApplyHeroFilters(request);
 
-            return Execute<ResponseModel<HeroModel>>(request) ?? new ResponseModel<HeroModel>();
+            return paged ? ExecutePaged<HeroModel>(request) : (Execute<ResponseModel<HeroModel>>(request) ?? new ResponseModel<HeroModel>());
         }
 
-        public ResponseModel<HeroModel> getSGDBGameHeroByAppId(string platform, string gameId)
+        public ResponseModel<HeroModel> getSGDBGameHeroByAppId(string platform, string gameId, bool paged = false)
         {
             var request = new RestRequest("heroes/{platform}/{gameId}", Method.GET);
             request.AddUrlSegment("platform", platform);
             request.AddUrlSegment("gameId", gameId);
             ApplyHeroFilters(request);
 
-            return Execute<ResponseModel<HeroModel>>(request) ?? new ResponseModel<HeroModel>();
+            return paged ? ExecutePaged<HeroModel>(request) : (Execute<ResponseModel<HeroModel>>(request) ?? new ResponseModel<HeroModel>());
         }
 
         private void ApplyHeroFilters(RestRequest request)
@@ -188,56 +260,63 @@ namespace SGDBMetadata
             {
                 request.AddQueryParameter("types", settings.BackgroundType);
             }
-            if (settings.BackgroundNsfw != "any")
+            if (!string.IsNullOrEmpty(settings.BackgroundNsfw))
             {
                 request.AddQueryParameter("nsfw", settings.BackgroundNsfw);
             }
-            if (settings.BackgroundHumor != "any")
+            if (!string.IsNullOrEmpty(settings.BackgroundHumor))
             {
                 request.AddQueryParameter("humor", settings.BackgroundHumor);
             }
-            if (settings.BackgroundEpilepsy != "any")
+            if (!string.IsNullOrEmpty(settings.BackgroundEpilepsy))
             {
-                request.AddQueryParameter("epilepsy", settings.BackgroundEpilepsy);
+                if (settings.BackgroundEpilepsy == "any" || settings.BackgroundEpilepsy == "true")
+                {
+                    request.AddQueryParameter("epilepsy", "true");
+                }
+                else
+                {
+                    request.AddQueryParameter("epilepsy", "false");
+                }
             }
         }
 
-        public ResponseModel<MediaModel> getSGDBGameLogo(int gameId)
+        public ResponseModel<MediaModel> getSGDBGameLogo(int gameId, bool paged = false)
         {
             var request = new RestRequest("logos/game/{gameId}", Method.GET);
             request.AddUrlSegment("gameId", gameId.ToString());
             ApplyIconOrLogoFilters(request);
 
-            return Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>();
+            return paged ? ExecutePaged<MediaModel>(request) : (Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>());
         }
 
-        public ResponseModel<MediaModel> getSGDBGameLogoByAppId(string platform, string gameId)
+        public ResponseModel<MediaModel> getSGDBGameLogoByAppId(string platform, string gameId, bool paged = false)
         {
             var request = new RestRequest("logos/{platform}/{gameId}", Method.GET);
             request.AddUrlSegment("platform", platform);
             request.AddUrlSegment("gameId", gameId);
             ApplyIconOrLogoFilters(request);
 
-            return Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>();
+            return paged ? ExecutePaged<MediaModel>(request) : (Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>());
         }
 
-        public ResponseModel<MediaModel> getSGDBGameIcon(int gameId)
+        public ResponseModel<MediaModel> getSGDBGameIcon(int gameId, bool paged = false)
         {
             var request = new RestRequest("icons/game/{gameId}", Method.GET);
             request.AddUrlSegment("gameId", gameId.ToString());
             ApplyIconOrLogoFilters(request);
 
-            return Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>();
+            return paged ? ExecutePaged<MediaModel>(request) : (Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>());
         }
 
-        public ResponseModel<MediaModel> getSGDBGameIconByAppId(string platform, string gameId)
+        public ResponseModel<MediaModel> getSGDBGameIconByAppId(string platform, string gameId, bool paged = false)
         {
             var request = new RestRequest("icons/{platform}/{gameId}", Method.GET);
             request.AddUrlSegment("platform", platform);
             request.AddUrlSegment("gameId", gameId);
             ApplyIconOrLogoFilters(request);
 
-            return Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>();
+            return paged ? ExecutePaged<MediaModel>(request) : (Execute<ResponseModel<MediaModel>>(request) ?? new ResponseModel<MediaModel>());
         }
 
         private void ApplyIconOrLogoFilters(RestRequest request)
@@ -250,17 +329,24 @@ namespace SGDBMetadata
             {
                 request.AddQueryParameter("types", settings.IconType);
             }
-            if (settings.IconNsfw != "any")
+            if (!string.IsNullOrEmpty(settings.IconNsfw))
             {
                 request.AddQueryParameter("nsfw", settings.IconNsfw);
             }
-            if (settings.IconHumor != "any")
+            if (!string.IsNullOrEmpty(settings.IconHumor))
             {
                 request.AddQueryParameter("humor", settings.IconHumor);
             }
-            if (settings.IconEpilepsy != "any")
+            if (!string.IsNullOrEmpty(settings.IconEpilepsy))
             {
-                request.AddQueryParameter("epilepsy", settings.IconEpilepsy);
+                if (settings.IconEpilepsy == "any" || settings.IconEpilepsy == "true")
+                {
+                    request.AddQueryParameter("epilepsy", "true");
+                }
+                else
+                {
+                    request.AddQueryParameter("epilepsy", "false");
+                }
             }
         }
 
@@ -323,7 +409,7 @@ namespace SGDBMetadata
         {
             if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                var grid = getSGDBGameGridByAppId(platform, gameId);
+                var grid = getSGDBGameGridByAppId(platform, gameId, paged: true);
                 if (grid?.success == true && grid.data?.Count > 0)
                 {
                     return grid.data;
@@ -332,7 +418,7 @@ namespace SGDBMetadata
 
             if (searchSelection != null && int.TryParse(searchSelection.Description, out int parsedId))
             {
-                var grid = getSGDBGameGridCover(parsedId);
+                var grid = getSGDBGameGridCover(parsedId, paged: true);
                 if (grid?.success == true && grid.data?.Count > 0)
                 {
                     return grid.data;
@@ -369,7 +455,7 @@ namespace SGDBMetadata
         {
             if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                var hero = getSGDBGameHeroByAppId(platform, gameId);
+                var hero = getSGDBGameHeroByAppId(platform, gameId, paged: true);
                 if (hero?.success == true && hero.data?.Count > 0)
                 {
                     return hero.data;
@@ -378,7 +464,7 @@ namespace SGDBMetadata
 
             if (searchSelection != null && int.TryParse(searchSelection.Description, out int parsedId))
             {
-                var hero = getSGDBGameHero(parsedId);
+                var hero = getSGDBGameHero(parsedId, paged: true);
                 if (hero?.success == true && hero.data?.Count > 0)
                 {
                     return hero.data;
@@ -415,7 +501,7 @@ namespace SGDBMetadata
         {
             if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                var logo = getSGDBGameLogoByAppId(platform, gameId);
+                var logo = getSGDBGameLogoByAppId(platform, gameId, paged: true);
                 if (logo?.success == true && logo.data?.Count > 0)
                 {
                     return logo.data;
@@ -424,7 +510,7 @@ namespace SGDBMetadata
 
             if (searchSelection != null && int.TryParse(searchSelection.Description, out int parsedId))
             {
-                var logo = getSGDBGameLogo(parsedId);
+                var logo = getSGDBGameLogo(parsedId, paged: true);
                 if (logo?.success == true && logo.data?.Count > 0)
                 {
                     return logo.data;
@@ -461,7 +547,7 @@ namespace SGDBMetadata
         {
             if (!string.IsNullOrEmpty(platform) && !string.IsNullOrEmpty(gameId))
             {
-                var icon = getSGDBGameIconByAppId(platform, gameId);
+                var icon = getSGDBGameIconByAppId(platform, gameId, paged: true);
                 if (icon?.success == true && icon.data?.Count > 0)
                 {
                     return icon.data;
@@ -470,7 +556,7 @@ namespace SGDBMetadata
 
             if (searchSelection != null && int.TryParse(searchSelection.Description, out int parsedId))
             {
-                var icon = getSGDBGameIcon(parsedId);
+                var icon = getSGDBGameIcon(parsedId, paged: true);
                 if (icon?.success == true && icon.data?.Count > 0)
                 {
                     return icon.data;
